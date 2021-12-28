@@ -1,0 +1,4 @@
+subdirs(
+  dict2mp
+)
+

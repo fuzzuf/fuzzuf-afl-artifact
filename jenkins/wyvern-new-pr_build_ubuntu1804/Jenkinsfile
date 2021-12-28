@@ -1,0 +1,27 @@
+@Library('atla') _
+def dist_info = get_dist_info()[ get_dist_name( "${JOB_NAME}" ) ]
+pipeline {
+  agent{
+    docker { image dist_info[ 'images' ][ 'flc' ] }
+  }
+  options {
+    ansiColor('gnome-terminal')
+  }
+  stages {
+    stage('Build') {
+      steps {
+        atla_checkout( 'NewWyvernPseudoCode', "${sha1}", true )
+        cmakeBuild buildDir: 'build', cmakeArgs: '-DENABLE_ADDRSAN=ON -DENABLE_LEAKSAN=ON -DENABLE_UBSAN=ON -DENABLE_HEAVY_TEST=OFF', buildType: 'Release', installation: 'InSearchPath', steps: [[args: 'all'],[args: 'test ARGS="-V"']]
+      }
+    }
+  }
+  post { 
+    success {
+      atla_notify_build_result( 'new wyvern', 'Ubuntu 18.04でのビルド', true )
+    }
+    unsuccessful {
+      atla_notify_build_result( 'new wyvern', 'Ubuntu 18.04でのビルド', false )
+    }
+  }
+}
+
