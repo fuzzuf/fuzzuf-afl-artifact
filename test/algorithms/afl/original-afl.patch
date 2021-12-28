@@ -1,0 +1,237 @@
+diff --git a/afl-fuzz.c b/afl-fuzz.c
+index 46a216c..2d64bab 100644
+--- a/afl-fuzz.c
++++ b/afl-fuzz.c
+@@ -368,17 +368,11 @@ static u64 get_cur_time_us(void) {
+ /* Generate a random number (from 0 to limit - 1). This may
+    have slight bias. */
+ 
+-static inline u32 UR(u32 limit) {
++static u32 reset_cnt;
+ 
++static inline u32 UR(u32 limit) {
+   if (unlikely(!rand_cnt--)) {
+-
+-    u32 seed[2];
+-
+-    ck_read(dev_urandom_fd, &seed, sizeof(seed), "/dev/urandom");
+-
+-    srandom(seed[0]);
+-    rand_cnt = (RESEED_RNG / 2) + (seed[1] % RESEED_RNG);
+-
++      srandom(reset_cnt++);
+   }
+ 
+   return random() % limit;
+@@ -1278,7 +1272,8 @@ static void update_bitmap_score(struct queue_entry* q) {
+ 
+          /* Faster-executing or smaller test cases are favored. */
+ 
+-         if (fav_factor > top_rated[i]->exec_us * top_rated[i]->len) continue;
++         if (UR(2)) continue;
++         //if (fav_factor > top_rated[i]->exec_us * top_rated[i]->len) continue;
+ 
+          /* Looks like we're going to win. Decrease ref count for the
+             previous winner, discard its trace_bits[] if necessary. */
+@@ -1538,14 +1533,18 @@ static int compare_extras_len(const void* p1, const void* p2) {
+   struct extra_data *e1 = (struct extra_data*)p1,
+                     *e2 = (struct extra_data*)p2;
+ 
+-  return e1->len - e2->len;
++  if (e1->len != e2->len) return e1->len - e2->len;
++  if (e1->hit_cnt != e2->hit_cnt) return e2->hit_cnt - e1->hit_cnt;
++  return memcmp(e1->data, e2->data, e1->len); // e1->len == e2->len
+ }
+ 
+ static int compare_extras_use_d(const void* p1, const void* p2) {
+   struct extra_data *e1 = (struct extra_data*)p1,
+                     *e2 = (struct extra_data*)p2;
+ 
+-  return e2->hit_cnt - e1->hit_cnt;
++  if (e1->hit_cnt != e2->hit_cnt) return e2->hit_cnt - e1->hit_cnt;
++  if (e1->len != e2->len) return e1->len - e2->len;
++  return memcmp(e1->data, e2->data, e1->len); // e1->len == e2->len
+ }
+ 
+ 
+@@ -3210,6 +3209,13 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
+     ck_write(fd, mem, len, fn);
+     close(fd);
+ 
++    if (queued_paths % 100 == 0) {
++        printf("%u reached. time: %llu\n", queued_paths, last_path_time - start_time);
++        if (queued_paths == 900) {
++            exit(0);
++        } 
++    }  
++
+     keeping = 1;
+ 
+   }
+@@ -4753,13 +4759,37 @@ static u32 calculate_score(struct queue_entry* q) {
+      global average. Multiplier ranges from 0.1x to 3x. Fast inputs are
+      less expensive to fuzz, so we're giving them more air time. */
+ 
+-  if (q->exec_us * 0.1 > avg_exec_us) perf_score = 10;
+-  else if (q->exec_us * 0.25 > avg_exec_us) perf_score = 25;
+-  else if (q->exec_us * 0.5 > avg_exec_us) perf_score = 50;
+-  else if (q->exec_us * 0.75 > avg_exec_us) perf_score = 75;
+-  else if (q->exec_us * 4 < avg_exec_us) perf_score = 300;
+-  else if (q->exec_us * 3 < avg_exec_us) perf_score = 200;
+-  else if (q->exec_us * 2 < avg_exec_us) perf_score = 150;
++  switch(UR(7)) {
++  case 0:
++      perf_score = 10;
++      break;
++  case 1:
++      perf_score = 25;
++      break;
++  case 2:
++      perf_score = 50;
++      break;
++  case 3:
++      perf_score = 75;
++      break;
++  case 4:
++      perf_score = 300;
++      break;
++  case 5:
++      perf_score = 200;
++      break;
++  case 6:
++      perf_score = 150;
++      break;
++  };
++
++  //if (q->exec_us * 0.1 > avg_exec_us) perf_score = 10;
++  //else if (q->exec_us * 0.25 > avg_exec_us) perf_score = 25;
++  //else if (q->exec_us * 0.5 > avg_exec_us) perf_score = 50;
++  //else if (q->exec_us * 0.75 > avg_exec_us) perf_score = 75;
++  //else if (q->exec_us * 4 < avg_exec_us) perf_score = 300;
++  //else if (q->exec_us * 3 < avg_exec_us) perf_score = 200;
++  //else if (q->exec_us * 2 < avg_exec_us) perf_score = 150;
+ 
+   /* Adjust score based on bitmap size. The working theory is that better
+      coverage translates to better targets. Multiplier from 0.25x to 3x. */
+@@ -6175,7 +6205,12 @@ havoc_stage:
+ 
+           /* Set byte to interesting value. */
+ 
+-          out_buf[UR(temp_len)] = interesting_8[UR(sizeof(interesting_8))];
++          {
++              u32 a = UR(temp_len);
++              u32 b = UR(sizeof(interesting_8));
++              out_buf[a] = interesting_8[b];
++          }
++          //out_buf[UR(temp_len)] = interesting_8[UR(sizeof(interesting_8))];
+           break;
+ 
+         case 2:
+@@ -6186,13 +6221,22 @@ havoc_stage:
+ 
+           if (UR(2)) {
+ 
+-            *(u16*)(out_buf + UR(temp_len - 1)) =
+-              interesting_16[UR(sizeof(interesting_16) >> 1)];
++            u32 a = UR(temp_len - 1);
++            u32 b = UR(sizeof(interesting_16) >> 1);
++            *(u16*)(out_buf + a) = 
++              interesting_16[b];
++            //*(u16*)(out_buf + UR(temp_len - 1)) =
++            //  interesting_16[UR(sizeof(interesting_16) >> 1)];
+ 
+           } else {
+ 
+-            *(u16*)(out_buf + UR(temp_len - 1)) = SWAP16(
+-              interesting_16[UR(sizeof(interesting_16) >> 1)]);
++            u32 a = UR(temp_len - 1);
++            u32 b = UR(sizeof(interesting_16) >> 1);
++            *(u16*)(out_buf + a) = SWAP16(
++              interesting_16[b]);
++            
++            //*(u16*)(out_buf + UR(temp_len - 1)) = SWAP16(
++            //  interesting_16[UR(sizeof(interesting_16) >> 1)]);
+ 
+           }
+ 
+@@ -6206,13 +6250,23 @@ havoc_stage:
+ 
+           if (UR(2)) {
+   
+-            *(u32*)(out_buf + UR(temp_len - 3)) =
+-              interesting_32[UR(sizeof(interesting_32) >> 2)];
++            u32 a = UR(temp_len - 3);
++            u32 b = UR(sizeof(interesting_32) >> 2);
++            *(u32*)(out_buf + a) = 
++              interesting_32[b];
++
++            //*(u32*)(out_buf + UR(temp_len - 3)) =
++            //  interesting_32[UR(sizeof(interesting_32) >> 2)];
+ 
+           } else {
+ 
+-            *(u32*)(out_buf + UR(temp_len - 3)) = SWAP32(
+-              interesting_32[UR(sizeof(interesting_32) >> 2)]);
++            u32 a = UR(temp_len - 3);
++            u32 b = UR(sizeof(interesting_32) >> 2);
++            *(u32*)(out_buf + a) = SWAP32(
++              interesting_32[b]);
++
++            //*(u32*)(out_buf + UR(temp_len - 3)) = SWAP32(
++            //  interesting_32[UR(sizeof(interesting_32) >> 2)]);
+ 
+           }
+ 
+@@ -6222,14 +6276,24 @@ havoc_stage:
+ 
+           /* Randomly subtract from byte. */
+ 
+-          out_buf[UR(temp_len)] -= 1 + UR(ARITH_MAX);
++          {
++            u32 a = UR(temp_len);
++            u32 b = UR(ARITH_MAX);
++            out_buf[a] -= 1 + b;
++          }
++          //out_buf[UR(temp_len)] -= 1 + UR(ARITH_MAX);
+           break;
+ 
+         case 5:
+ 
+           /* Randomly add to byte. */
+ 
+-          out_buf[UR(temp_len)] += 1 + UR(ARITH_MAX);
++          {
++            u32 a = UR(temp_len);
++            u32 b = UR(ARITH_MAX);
++            out_buf[a] += 1 + b;
++          }
++          //out_buf[UR(temp_len)] += 1 + UR(ARITH_MAX);
+           break;
+ 
+         case 6:
+@@ -6334,7 +6398,12 @@ havoc_stage:
+              why not. We use XOR with 1-255 to eliminate the
+              possibility of a no-op. */
+ 
+-          out_buf[UR(temp_len)] ^= 1 + UR(255);
++          {
++            u32 a = 1 + UR(255);
++            out_buf[UR(temp_len)] ^= a;
++          }
++            
++          //out_buf[UR(temp_len)] ^= 1 + UR(255);
+           break;
+ 
+         case 11 ... 12: {
+@@ -7792,8 +7861,9 @@ int main(int argc, char** argv) {
+ 
+   doc_path = access(DOC_PATH, F_OK) ? "docs" : DOC_PATH;
+ 
+-  gettimeofday(&tv, &tz);
+-  srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
++  srandom(0);
++  //gettimeofday(&tv, &tz);
++  //srandom(tv.tv_sec ^ tv.tv_usec ^ getpid());
+ 
+   while ((opt = getopt(argc, argv, "+i:o:f:m:b:t:T:dnCB:S:M:x:QV")) > 0)
+ 

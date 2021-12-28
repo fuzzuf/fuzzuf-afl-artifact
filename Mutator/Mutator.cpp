@@ -229,51 +229,136 @@ void Mutator::Havoc(
             break;
         case 1: 
             /* Set byte to interesting value. */
+#ifdef BEHAVE_DETERMINISTIC
+            {
+                auto a = UR(len);
+                auto b = UR(interesting_8.size());
+                InterestN<u8>(a, b, false);
+            }
+#else
             InterestN<u8>(UR(len), UR(interesting_8.size()), false);
+#endif
             break;
         case 2:
             /* Set word to interesting value, randomly choosing endian. */
             if (len < 2) break;
+#ifdef BEHAVE_DETERMINISTIC
+            {
+                auto c = !UR(2);
+                auto a = UR(len - 1);
+                auto b = UR(interesting_16.size());
+                InterestN<u16>(a, b, c);
+            }
+#else
             InterestN<u16>(UR(len - 1), UR(interesting_16.size()), !UR(2));
+#endif
             break;
         case 3:
             /* Set dword to interesting value, randomly choosing endian. */
             if (len < 4) break;
+#ifdef BEHAVE_DETERMINISTIC
+            {
+                auto c = !UR(2);
+                auto a = UR(len - 3);
+                auto b = UR(interesting_32.size());
+                InterestN<u32>(a, b, c);
+            }
+#else
             InterestN<u32>(UR(len - 3), UR(interesting_32.size()), !UR(2));
+#endif
             break;
         case 4:
             /* Randomly subtract from byte. */
+#ifdef BEHAVE_DETERMINISTIC
+            {
+                auto a = UR(len);
+                auto b = 1 + UR(AFLOption::ARITH_MAX);
+                SubN<u8>(a, b, false);
+            }
+#else
             SubN<u8>(UR(len), 1 + UR(AFLOption::ARITH_MAX), false);
+#endif
             break;
         case 5:
             /* Randomly add to byte. */
+#ifdef BEHAVE_DETERMINISTIC
+            {
+                auto a = UR(len);
+                auto b = 1 + UR(AFLOption::ARITH_MAX);
+                AddN<u8>(a, b, false);
+            }
+#else
             AddN<u8>(UR(len), 1 + UR(AFLOption::ARITH_MAX), false);
+#endif
             break;
         case 6:
             /* Randomly subtract from word, random endian. */
             if (len < 2) break;
+#ifdef BEHAVE_DETERMINISTIC
+            {
+                auto c = !UR(2);
+                auto a = UR(len - 1);
+                auto b = 1 + UR(AFLOption::ARITH_MAX);
+                SubN<u16>(a, b, c);
+            }
+#else
             SubN<u16>(UR(len - 1), 1 + UR(AFLOption::ARITH_MAX), !UR(2));
+#endif
             break;
         case 7:
             /* Randomly add to word, random endian. */
             if (len < 2) break;
+#ifdef BEHAVE_DETERMINISTIC
+            {
+                auto c = !UR(2);
+                auto a = UR(len - 1);
+                auto b = 1 + UR(AFLOption::ARITH_MAX);
+                AddN<u16>(a, b, c);
+            }
+#else
             AddN<u16>(UR(len - 1), 1 + UR(AFLOption::ARITH_MAX), !UR(2));
+#endif
             break;
         case 8:
             /* Randomly subtract from dword, random endian. */
             if (len < 4) break;
+#ifdef BEHAVE_DETERMINISTIC
+            {
+                auto c = !UR(2);
+                auto a = UR(len - 3);
+                auto b = 1 + UR(AFLOption::ARITH_MAX);
+                SubN<u32>(a, b, c);
+            }
+#else
             SubN<u32>(UR(len - 3), 1 + UR(AFLOption::ARITH_MAX), !UR(2));
+#endif
             break;
         case 9:
             /* Randomly add to dword, random endian. */
             if (len < 4) break;
+#ifdef BEHAVE_DETERMINISTIC
+            {
+                auto c = !UR(2);
+                auto a = UR(len - 3);
+                auto b = 1 + UR(AFLOption::ARITH_MAX);
+                AddN<u32>(a, b, c);
+            }
+#else
             AddN<u32>(UR(len - 3), 1 + UR(AFLOption::ARITH_MAX), !UR(2));
+#endif
             break;
         case 10:
           /* Just set a random byte to a random value. Because,
              why not. We use XOR with 1-255 to eliminate the
              possibility of a no-op. */
+#ifdef BEHAVE_DETERMINISTIC
+             {
+                auto a = 1 + UR(255);
+                outbuf[UR(len)] ^= a;
+             }
+#else
              outbuf[UR(len)] ^= 1 + UR(255);
+#endif
              break;
         case 11 ... 12: {
             /* Delete bytes. We're making this a bit more likely

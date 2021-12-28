@@ -132,14 +132,28 @@ static void MaybeAddAuto(AFLState &state, const std::vector<u8> &mem) {
 
     std::sort(state.a_extras.begin(), state.a_extras.end(), 
         [](const AFLDictData& e1, const AFLDictData& e2) {
+#ifdef BEHAVE_DETERMINISTIC
+            if (e1.hit_cnt != e2.hit_cnt) return e1.hit_cnt > e2.hit_cnt;
+            if (e1.data.size() != e2.data.size()) return e1.data.size() < e2.data.size();
+            return std::lexicographical_compare(e1.data.begin(), e1.data.end(),
+                                                e2.data.begin(), e2.data.end());
+#else
             return e1.hit_cnt > e2.hit_cnt;
+#endif
         }
     );
 
     size_t lim = std::min<size_t>(AFLOption::USE_AUTO_EXTRAS, state.a_extras.size());
     std::sort(state.a_extras.begin(), state.a_extras.begin() + lim, 
         [](const AFLDictData& e1, const AFLDictData& e2) {
+#ifdef BEHAVE_DETERMINISTIC
+            if (e1.data.size() != e2.data.size()) return e1.data.size() < e2.data.size();
+            if (e1.hit_cnt != e2.hit_cnt) return e1.hit_cnt > e2.hit_cnt;
+            return std::lexicographical_compare(e1.data.begin(), e1.data.end(),
+                                                e2.data.begin(), e2.data.end());
+#else
             return e1.data.size() < e2.data.size();
+#endif
         }
     );
 }

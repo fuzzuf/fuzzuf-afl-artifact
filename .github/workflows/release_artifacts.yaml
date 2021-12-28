@@ -1,0 +1,49 @@
+name: release mirror
+on:
+  push:
+    branches:
+      - artifact/test-afl-consistency-performance
+permissions:
+  contents: read
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout orig
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+          path: orig
+          ref: artifact/test-afl-consistency-performance
+      - name: set Git config
+        run: |
+          git config --global user.email "fuzzuf-dev@ricsec.co.jp"
+          git config --global user.name "ricsec-bot"
+      - name: set SSH key
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY_ARTIFACT }}
+        run: |
+          echo "$SSH_KEY" > key.pem
+          chmod 600 key.pem
+      - name: clone
+        env:
+          GIT_SSH_COMMAND: ssh -i key.pem
+        run: |
+          git clone git@github.com:fuzzuf/fuzzuf-afl-artifact release
+      - name: apply changes
+        working-directory: ./orig
+        run: |
+          git archive HEAD | tar -x -C ../release
+      - name: commit changes
+        working-directory: ./release
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          git add -A
+          git commit -m "implement the consistency and performance test of AFL"
+      - name: push changes
+        working-directory: ./release
+        env:
+          GIT_SSH_COMMAND: ssh -i ../key.pem
+        run: |
+          git push origin master

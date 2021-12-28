@@ -15,12 +15,22 @@ namespace util {
 
 u32 UR(u32 limit, int rand_fd) {
     static u32 rand_cnt;
+
+#ifdef BEHAVE_DETERMINISTIC
+    rand_fd++; // Just to muzzle Wunused-variable
+    static u32 cnt;
+    if (unlikely(!rand_cnt--)) {
+        srandom(cnt++);
+    }
+#else
     if (rand_fd != -1 && unlikely(!rand_cnt--)) {
         u32 seed[2];
         Util::ReadFile(rand_fd, &seed, sizeof(seed));
         srandom(seed[0]);
         rand_cnt = (AFLOption::RESEED_RNG / 2) + (seed[1] % AFLOption::RESEED_RNG);
     }
+#endif
+
     return random() % limit;
 }
 
@@ -215,14 +225,22 @@ void UpdateBitmapScoreWithRawTrace(
     const u8 *trace_bits,
     u32 map_size
 ) {
+#ifdef BEHAVE_DETERMINISTIC // Just for ease of grep
+#else
     u64 fav_factor = testcase.exec_us * testcase.input->GetLen();
+#endif
 
     for (u32 i=0; i<map_size; i++) {
         if (trace_bits[i]) {
             if (state.top_rated[i]) {
                 auto &top_testcase = state.top_rated[i].value().get();
+#ifdef BEHAVE_DETERMINISTIC
+                // FIXME: this probability may be too much. Need for opinions.
+                if (UR(2, -1)) continue; 
+#else
                 u64 factor = top_testcase.exec_us * top_testcase.input->GetLen();
                 if (fav_factor > factor) continue;
+#endif
              
                 /* Looks like we're going to win. Decrease ref count for the
                    previous winner, discard its trace_bits[] if necessary. */        
@@ -444,6 +462,13 @@ std::shared_ptr<AFLTestcase> AddToQueue(
     state.pending_not_fuzzed++;
     state.cycles_wo_finds = 0;
     state.last_path_time = Util::GetCurTimeMs();
+
+    if (state.queued_paths % 100 == 0) {
+        printf("%u reached. time: %llu\n", state.queued_paths, state.last_path_time - state.start_time);
+        if (state.queued_paths == 900) {
+            exit(0);
+        }
+    }
 
     return testcase;
 }

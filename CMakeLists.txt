@@ -75,6 +75,7 @@ endif()
 find_package( NlohmannJSON REQUIRED )
 
 set( ADDITIONAL_COMPILE_FLAGS )
+set( BEHAVE_DETERMINISTIC "Yes" )
 
 option( ENABLE_ADDRSAN "build with address sanitizer" OFF)
 if( ENABLE_ADDRSAN )

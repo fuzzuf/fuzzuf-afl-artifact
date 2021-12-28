@@ -356,6 +356,35 @@ static u32 DoCalcScore(AFLState &state, AFLTestcase &testcase) {
        global average. Multiplier ranges from 0.1x to 3x. Fast inputs are
        less expensive to fuzz, so we're giving them more air time. */
 
+#ifdef BEHAVE_DETERMINISTIC
+    avg_exec_us++; // Just to muzzle Wunused-variable
+    avg_exec_us--;
+
+    using afl::util::UR;
+    switch(UR(7, -1)) {
+    case 0:
+        perf_score = 10;
+        break;
+    case 1:
+        perf_score = 25;
+        break;
+    case 2:
+        perf_score = 50;
+        break;
+    case 3:
+        perf_score = 75;
+        break;
+    case 4:
+        perf_score = 300;
+        break;
+    case 5:
+        perf_score = 200;
+        break;
+    case 6:
+        perf_score = 150;
+        break;
+    };
+#else
     if (testcase.exec_us * 0.1 > avg_exec_us) perf_score = 10;
     else if (testcase.exec_us * 0.25 > avg_exec_us) perf_score = 25;
     else if (testcase.exec_us * 0.5 > avg_exec_us) perf_score = 50;
@@ -363,6 +392,7 @@ static u32 DoCalcScore(AFLState &state, AFLTestcase &testcase) {
     else if (testcase.exec_us * 4 < avg_exec_us) perf_score = 300;
     else if (testcase.exec_us * 3 < avg_exec_us) perf_score = 200;
     else if (testcase.exec_us * 2 < avg_exec_us) perf_score = 150;
+#endif
 
     /* Adjust score based on bitmap size. The working theory is that better
        coverage translates to better targets. Multiplier from 0.25x to 3x. */
